@@ -1,0 +1,46 @@
+<IfModule mod_rewrite.c>
+    # Enable rewrite engine
+    RewriteEngine On
+
+    # Redirect HTTP to HTTPS
+    RewriteCond %{HTTPS} off
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # Normalize URL by removing the trailing slash unless it's a directory
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.+)/$ /$1 [R=301,L]
+
+    # If the requested filename does not exist, try appending .php extension
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}.php -f
+    RewriteRule ^(.+)$ $1.php [L,QSA]
+
+    # Protect DKIM private key directory
+    RewriteRule ^dkim/ - [F,L,NC]
+
+    # Route all non-existing file or directory requests to index.php
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+
+<IfModule !mod_rewrite.c>
+    <IfModule mod_alias.c>
+        # Fallback to index.php if mod_rewrite is not available
+        RedirectMatch 302 ^/$ /index/
+    </IfModule>
+</IfModule>
+
+# Disable MultiViews to prevent content negotiation interfering with our rules
+Options -MultiViews
+
+# Custom 404 Page
+ErrorDocument 404 /404
+
+# php -- BEGIN cPanel-generated handler, do not edit
+# Set the “ea-php83” package as the default “PHP” programming language.
+<IfModule mime_module>
+  AddHandler application/x-httpd-ea-php83___lsphp .php .php8 .phtml
+</IfModule>
+# php -- END cPanel-generated handler, do not edit

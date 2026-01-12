@@ -1,0 +1,24 @@
+{
+  "name": "innovativefunnels/funnels",
+  "description": "Make Money!",
+  "minimum-stability": "stable",
+  "license": "proprietary",
+  "authors": [
+    {
+      "name": "Jessie Martin",
+      "email": "dev@ezcaptuepage.com"
+    }
+  ],
+  "require": {
+    "phpmailer/phpmailer": "^6.5.0",
+    "stripe/stripe-php": "v15.3.0",
+    "ext-pdo": "*",
+    "paypal/rest-api-sdk-php": "^1.14",
+    "ext-json": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "EZCapture\\": "includes/"
+    }
+  }
+}

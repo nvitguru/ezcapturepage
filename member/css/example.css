@@ -1,0 +1,17 @@
+.full-screen{
+    height: 100vh;
+}
+.card{
+    background: rgba(0, 0, 0, 0.9) !important;
+}
+.form-control-lg{
+    font-size: 1.75rem;
+}
+.input-group-lg>.input-group-text {
+    font-size: 2rem;
+    padding: 1rem;
+}
+.input-group-lg>.input-group-text {
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+}

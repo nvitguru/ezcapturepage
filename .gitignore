@@ -1,0 +1,26 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+/vendor/
+/node_modules/
+
+# Logs
+*.log
+
+# Runtime / uploads
+/storage/
+/uploads/
+tmp/
+cache/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
