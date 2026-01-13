@@ -1,43 +1,80 @@
 <?php
-/** @var Database $pdo */
+/**
+ * togglePage.php
+ *
+ * Responsibilities:
+ * - Toggle a capture page active/inactive state from the pages list
+ * - Set flash messaging and redirect back to the pages view
+ *
+ * Notes:
+ * - This handler expects a POST request with `togglePage` and `pageID`
+ */
+
 session_start();
 
 include '../includes/session.php';
 include '../includes/settings.php';
 
-$conn = $pdo->open();
+/**
+ * Auth gate: ensure only authenticated users can toggle pages.
+ */
+if (!isset($_SESSION['user'])) {
+    header('location: index.php');
+    exit;
+}
 
+/**
+ * Guard clause: validate request intent.
+ */
+if (!isset($_POST['togglePage'])) {
+    $_SESSION['error'] = 'Oops! An error occurred. Please try again later.';
+    header('Location: dashboard.php');
+    exit;
+}
+
+/**
+ * Validate required input.
+ */
+if (!isset($_POST['pageID']) || $_POST['pageID'] === '') {
+    $_SESSION['error'] = 'Oops! An error occurred. Please try again later.';
+    header('Location: view-pages.php');
+    exit;
+}
+
+$pageID = (int)$_POST['pageID'];
+
+/**
+ * Open database connection.
+ */
 try {
     $conn = $pdo->open();
 } catch (PDOException $e) {
     $_SESSION['error'] = 'Database connection failed: ' . $e->getMessage();
-    header("location: dashboard.php");
-    exit();
+    header('Location: dashboard.php');
+    exit;
 }
 
-if (isset($_POST['togglePage'])) {
+/**
+ * Toggle page active status.
+ */
+$conn->beginTransaction();
 
-    $pageID = $_POST['pageID'];
+try {
+    $updateStmt = $conn->prepare(
+        "UPDATE pages SET active = !active WHERE pageID = :pageID"
+    );
+    $updateStmt->execute(['pageID' => $pageID]);
 
-    $conn->beginTransaction();
+    $conn->commit();
 
-    try {
-        $updateStmt = $conn->prepare("UPDATE pages SET active = !active WHERE pageID = :pageID");
-        $updateStmt->execute(['pageID' => $pageID]);
+    $_SESSION['success'] = 'Capture Page toggled successfully!';
+    header('Location: view-pages.php');
+    exit;
 
-        // Commit the transaction
-        $conn->commit();
-        $_SESSION['success'] = 'Capture Page toggled successfully!';
-        header("Location: view-pages.php");
-    } catch (PDOException $e) {
-        // Rollback the transaction in case of any error
-        $conn->rollBack();
-        $_SESSION['error'] = 'Database error: ' . $e->getMessage();
-        header("Location: view-pages.php");
-    }
-} else    {
-    $_SESSION['error'] = 'Oops! An error occurred. Please try again later.';
-    header("Location: dashboard.php");
+} catch (PDOException $e) {
+    $conn->rollBack();
+
+    $_SESSION['error'] = 'Database error: ' . $e->getMessage();
+    header('Location: view-pages.php');
+    exit;
 }
-
-exit();

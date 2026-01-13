@@ -1,44 +1,71 @@
 <?php
-/** @var Database $pdo */
+/**
+ * toggleDashPage.php
+ *
+ * Responsibilities:
+ * - Toggle a capture page active/inactive state from the dashboard
+ * - Set flash messaging and redirect back to the dashboard
+ *
+ * Notes:
+ * - This handler expects a GET request with `pageID`
+ */
+
 session_start();
 
 include '../includes/session.php';
 include '../includes/settings.php';
 
-$conn = $pdo->open();
+/**
+ * Auth gate: ensure only logged-in users can toggle pages.
+ */
+if (!isset($_SESSION['user'])) {
+    header('location: index.php');
+    exit;
+}
 
+/**
+ * Guard clause: validate required input.
+ */
+if (!isset($_GET['pageID']) || $_GET['pageID'] === '') {
+    $_SESSION['error'] = 'Oops! An error occurred. Please try again later.';
+    header('Location: dashboard');
+    exit;
+}
+
+$pageID = (int)$_GET['pageID'];
+
+/**
+ * Open database connection.
+ */
 try {
     $conn = $pdo->open();
 } catch (PDOException $e) {
     $_SESSION['error'] = 'Database connection failed: ' . $e->getMessage();
-    header("location: dashboard.php");
-    exit();
+    header('Location: dashboard');
+    exit;
 }
 
-if (isset($_GET['pageID'])) {
+/**
+ * Toggle page active status.
+ */
+$conn->beginTransaction();
 
-    $pageID = $_GET['pageID'];
+try {
+    $updateStmt = $conn->prepare(
+        "UPDATE pages SET active = !active WHERE pageID = :pageID"
+    );
+    $updateStmt->execute(['pageID' => $pageID]);
 
-    $conn->beginTransaction();
+    $conn->commit();
 
-    try {
-        $updateStmt = $conn->prepare("UPDATE pages SET active = !active WHERE pageID = :pageID");
-        $updateStmt->execute(['pageID' => $pageID]);
+    $_SESSION['success'] = 'Capture Page toggled successfully!';
+    header('Location: dashboard');
+    exit;
 
-        // Commit the transaction
-        $conn->commit();
-        $_SESSION['success'] = 'Capture Page toggled successfully!';
-        header("Location: dashboard");
-    } catch (PDOException $e) {
-        // Rollback the transaction in case of any error
-        $conn->rollBack();
-        $_SESSION['error'] = 'Database error: ' . $e->getMessage();
-        header("Location: dashboard");
-    }
-} else {
-    $_SESSION['error'] = 'Oops! An error occurred. Please try again later.';
-    header("Location: dashboard");
+} catch (PDOException $e) {
+    $conn->rollBack();
+
+    $_SESSION['error'] = 'Database error: ' . $e->getMessage();
+    header('Location: dashboard');
+    exit;
 }
-
-exit();
-?>

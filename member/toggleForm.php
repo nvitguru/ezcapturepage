@@ -1,43 +1,80 @@
 <?php
-/** @var Database $pdo */
+/**
+ * toggleForm.php
+ *
+ * Responsibilities:
+ * - Toggle a capture form active/inactive state
+ * - Set flash messaging and redirect back to the forms list
+ *
+ * Notes:
+ * - This handler expects a POST request with `toggleForm` and `formID`
+ */
+
 session_start();
 
 include '../includes/session.php';
 include '../includes/settings.php';
 
-$conn = $pdo->open();
+/**
+ * Auth gate: ensure only authenticated users can toggle forms.
+ */
+if (!isset($_SESSION['user'])) {
+    header('location: index.php');
+    exit;
+}
 
+/**
+ * Guard clause: validate request intent.
+ */
+if (!isset($_POST['toggleForm'])) {
+    $_SESSION['error'] = 'Oops! An error occurred. Please try again later.';
+    header('Location: dashboard.php');
+    exit;
+}
+
+/**
+ * Validate required input.
+ */
+if (!isset($_POST['formID']) || $_POST['formID'] === '') {
+    $_SESSION['error'] = 'Oops! An error occurred. Please try again later.';
+    header('Location: view-forms.php');
+    exit;
+}
+
+$formID = (int)$_POST['formID'];
+
+/**
+ * Open database connection.
+ */
 try {
     $conn = $pdo->open();
 } catch (PDOException $e) {
     $_SESSION['error'] = 'Database connection failed: ' . $e->getMessage();
-    header("location: dashboard.php");
-    exit();
+    header('Location: dashboard.php');
+    exit;
 }
 
-if (isset($_POST['toggleForm'])) {
+/**
+ * Toggle form active status.
+ */
+$conn->beginTransaction();
 
-    $formID = $_POST['formID'];
+try {
+    $updateStmt = $conn->prepare(
+        "UPDATE form SET active = !active WHERE formID = :formID"
+    );
+    $updateStmt->execute(['formID' => $formID]);
 
-    $conn->beginTransaction();
+    $conn->commit();
 
-    try {
-        $updateStmt = $conn->prepare("UPDATE form SET active = !active WHERE formID = :formID");
-        $updateStmt->execute(['formID' => $formID]);
+    $_SESSION['success'] = 'Capture Page Form toggled successfully!';
+    header('Location: view-forms.php');
+    exit;
 
-        // Commit the transaction
-        $conn->commit();
-        $_SESSION['success'] = 'Capture Page Form toggled successfully!';
-        header("Location: view-forms.php");
-    } catch (PDOException $e) {
-        // Rollback the transaction in case of any error
-        $conn->rollBack();
-        $_SESSION['error'] = 'Database error: ' . $e->getMessage();
-        header("Location: view-forms.php");
-    }
-} else    {
-    $_SESSION['error'] = 'Oops! An error occurred. Please try again later.';
-    header("Location: dashboard.php");
+} catch (PDOException $e) {
+    $conn->rollBack();
+
+    $_SESSION['error'] = 'Database error: ' . $e->getMessage();
+    header('Location: view-forms.php');
+    exit;
 }
-
-exit();

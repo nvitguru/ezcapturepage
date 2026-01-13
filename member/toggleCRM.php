@@ -1,43 +1,78 @@
 <?php
-/** @var Database $pdo */
+/**
+ * toggleCRM.php
+ *
+ * Responsibilities:
+ * - Toggle a CRM record active/inactive for the current user context
+ * - Set a flash message and redirect back to the CRM list
+ *
+ * Notes:
+ * - This handler expects a POST request with `toggleCRM` and `crmID`.
+ */
+
 session_start();
 
 include '../includes/session.php';
 include '../includes/settings.php';
 
-$conn = $pdo->open();
+/**
+ * Auth gate: only authenticated users should be able to toggle CRM status.
+ */
+if (!isset($_SESSION['user'])) {
+    header('location: index.php');
+    exit;
+}
 
+/**
+ * Guard clause: only accept valid POST submissions.
+ */
+if (!isset($_POST['toggleCRM'])) {
+    $_SESSION['error'] = 'Oops! An error occurred. Please try again later.';
+    header('Location: dashboard.php');
+    exit;
+}
+
+/**
+ * Validate input.
+ */
+if (!isset($_POST['crmID']) || $_POST['crmID'] === '') {
+    $_SESSION['error'] = 'Oops! An error occurred. Please try again later.';
+    header('Location: view-crms.php');
+    exit;
+}
+
+$crmID = (int)$_POST['crmID'];
+
+/**
+ * Open database connection.
+ */
 try {
     $conn = $pdo->open();
 } catch (PDOException $e) {
     $_SESSION['error'] = 'Database connection failed: ' . $e->getMessage();
-    header("location: dashboard.php");
-    exit();
+    header('Location: dashboard.php');
+    exit;
 }
 
-if (isset($_POST['toggleCRM'])) {
+/**
+ * Toggle active flag.
+ */
+$conn->beginTransaction();
 
-    $crmID = $_POST['crmID'];
+try {
+    $updateStmt = $conn->prepare("UPDATE crm SET active = !active WHERE crmID = :crmID");
+    $updateStmt->execute(['crmID' => $crmID]);
 
-    $conn->beginTransaction();
+    $conn->commit();
 
-    try {
-        $updateStmt = $conn->prepare("UPDATE crm SET active = !active WHERE crmID = :crmID");
-        $updateStmt->execute(['crmID' => $crmID]);
+    $_SESSION['success'] = 'Capture Page CRM toggled successfully!';
+    header('Location: view-crms.php');
+    exit;
 
-        // Commit the transaction
-        $conn->commit();
-        $_SESSION['success'] = 'Capture Page CRM toggled successfully!';
-        header("Location: view-crms.php");
-    } catch (PDOException $e) {
-        // Rollback the transaction in case of any error
-        $conn->rollBack();
-        $_SESSION['error'] = 'Database error: ' . $e->getMessage();
-        header("Location: view-crms.php");
-    }
-} else    {
-    $_SESSION['error'] = 'Oops! An error occurred. Please try again later.';
-    header("Location: dashboard.php");
+} catch (PDOException $e) {
+    $conn->rollBack();
+
+    $_SESSION['error'] = 'Database error: ' . $e->getMessage();
+    header('Location: view-crms.php');
+    exit;
 }
-
-exit();

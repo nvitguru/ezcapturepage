@@ -1,4 +1,13 @@
 <?php
+/**
+ * view-forms.php
+ *
+ * Responsibilities:
+ * - Require an authenticated session
+ * - Query and display all capture forms for the logged-in user
+ * - Show CRM association, status, and actions (toggle/edit/delete)
+ */
+
 /** @var Database $pdo */
 session_start();
 
@@ -8,10 +17,17 @@ $tab = "form";
 include '../includes/session.php';
 include '../includes/settings.php';
 
+/**
+ * Auth guard: only allow logged-in members.
+ */
 if (!isset($_SESSION['user'])) {
     header('location: index.php');
+    exit;
 }
 
+/**
+ * Open database connection.
+ */
 $conn = $pdo->open();
 
 ?>
@@ -87,54 +103,87 @@ $conn = $pdo->open();
                                         </thead>
                                         <tbody>
                                         <?php
-                                        $conn = $pdo->open();
-
+                                        /**
+                                         * Fetch forms scoped to the logged-in user.
+                                         * Also fetch the CRM for each form (per current schema: form.crm = crmID).
+                                         */
                                         try {
                                             $formStmt = $conn->prepare("SELECT * FROM `form` WHERE `userID` = :userID");
-                                            $crmStmt = $conn->prepare("SELECT * FROM `crm` WHERE `crmID` = :crmID");
+                                            $crmStmt  = $conn->prepare("SELECT * FROM `crm` WHERE `crmID` = :crmID");
+
                                             $formStmt->execute(['userID'=> $user['userID']]);
-                                            $form = $formStmt->fetchAll();
-                                            foreach ($form as $row) {
-                                                $crmStmt->execute(['crmID'=> $row['crm']]);
-                                                $crm = $crmStmt->fetch();
-                                                if($row['active']){
-                                                    $statusColor = "warning";
-                                                    $statusIcon = "fa-pause-circle";
-                                                    $toggleAction = "Deactivate";
-                                                    $deleteBtn = "<li><a href='javascript:void(0)' data-bs-toggle='tooltip' data-bs-placement='auto' title='Attention! This form is currently ACTIVE. To delete, please deactivate the form first.' disabled><i class='fa fa-trash fa-2x text-dark'></i></a></li>";
-                                                } else {
-                                                    $statusColor = "success";
-                                                    $statusIcon = "fa-play-circle";
-                                                    $toggleAction = "Publish";
-                                                    $deleteBtn = "<li><a href='#deleteModal' data-bs-toggle='modal' data-id='". $row['formID'] ."'><i class='fa fa-trash fa-2x text-dark'></i></a></li>";
+                                            $forms = $formStmt->fetchAll();
+
+                                            foreach ($forms as $row) {
+
+                                                // Lookup CRM (may be null/missing if deleted or not assigned)
+                                                $crmName = '—';
+                                                if (!empty($row['crm'])) {
+                                                    $crmStmt->execute(['crmID'=> $row['crm']]);
+                                                    $crm = $crmStmt->fetch();
+                                                    if ($crm && isset($crm['name'])) {
+                                                        $crmName = $crm['name'];
+                                                    }
                                                 }
-                                                $formStatus = $row['active'] ? "<span class='badge rounded-pill badge-success'>ACTIVE</span>" : "<span class='badge rounded-pill badge-warning'>INACTIVE</span>";
+
+                                                /**
+                                                 * UI helpers based on active status.
+                                                 */
+                                                $isActive = !empty($row['active']);
+                                                $formStatus = $isActive
+                                                    ? "<span class='badge rounded-pill badge-success'>ACTIVE</span>"
+                                                    : "<span class='badge rounded-pill badge-warning'>INACTIVE</span>";
+
+                                                if ($isActive) {
+                                                    $statusColor  = "warning";
+                                                    $statusIcon   = "fa-pause-circle";
+                                                    $toggleAction = "Deactivate"; // informational (not displayed)
+                                                    $deleteBtn    = "<li><a href='javascript:void(0)' data-bs-toggle='tooltip' data-bs-placement='auto' title='Attention! This form is currently ACTIVE. To delete, please deactivate the form first.' disabled><i class='fa fa-trash fa-2x text-dark'></i></a></li>";
+                                                } else {
+                                                    $statusColor  = "success";
+                                                    $statusIcon   = "fa-play-circle";
+                                                    $toggleAction = "Publish"; // informational (not displayed)
+                                                    $deleteBtn    = "<li><a href='#deleteModal' data-bs-toggle='modal' data-id='". $row['formID'] ."'><i class='fa fa-trash fa-2x text-dark'></i></a></li>";
+                                                }
+
+                                                /**
+                                                 * Note: hidden ID column is used for sorting.
+                                                 * Use formID (matches toggle/edit/delete identifiers).
+                                                 */
                                                 echo "
                                                 <tr>
-                                                    <td class='d-none'>". $row['id'] ."</td>
+                                                    <td class='d-none'>". $row['formID'] ."</td>
                                                     <td><h5>". $row['name'] ."</h5></td>
-                                                    <td><h5>". $crm['name'] ."</h5></td>
+                                                    <td><h5>". $crmName ."</h5></td>
                                                     <td><h5>$formStatus</h5></td>
                                                     <td>
                                                         <ul class='action'>
                                                             <li class='text-success me-4'>
-                                                            <form id='toggleForm' method='post' action='toggleForm.php'>
-                                                                <input type='hidden' name='formID' value='". $row['formID'] ."'>
-                                                                <button type='submit' class='text-". $statusColor ."' name='toggleForm' style='background: none; border: none; padding: 0; cursor: pointer;'>
-                                                                    <a><i class='fa ". $statusIcon ." fa-2x'></i></a></li>
-                                                                </button>
-                                                            </form>
-                                                            <li class='me-4'> <a href='form.php?formID=". $row['formID'] ."'><i class='fa fa-edit fa-2x'></i></a></li>
+                                                                <form method='post' action='toggleForm.php' class='d-inline'>
+                                                                    <input type='hidden' name='formID' value='". $row['formID'] ."'>
+                                                                    <button type='submit' class='text-". $statusColor ."' name='toggleForm' style='background: none; border: none; padding: 0; cursor: pointer;'>
+                                                                        <i class='fa ". $statusIcon ." fa-2x'></i>
+                                                                    </button>
+                                                                </form>
+                                                            </li>
+                                                            <li class='me-4'>
+                                                                <a href='form.php?formID=". $row['formID'] ."'>
+                                                                    <i class='fa fa-edit fa-2x'></i>
+                                                                </a>
+                                                            </li>
                                                             ". $deleteBtn ."
                                                         </ul>
                                                     </td>
                                                 </tr>";
-                                                }
+                                            }
                                         } catch (PDOException $e) {
                                             echo $e->getMessage();
                                         }
 
-                                            $pdo->close();
+                                        /**
+                                         * Close DB connection via wrapper.
+                                         */
+                                        $pdo->close();
                                         ?>
                                         </tbody>
                                     </table>
@@ -171,8 +220,12 @@ $conn = $pdo->open();
                     </div>
                     <div class="col-12 d-grid">
                         <div class="btn-group" role="group" aria-label="Basic example">
-                            <button type="button" class="btn btn-dark btn-lg close" data-bs-dismiss="modal" aria-label="Close"><i class='fa fa-times-circle'></i> CANCEL</button>
-                            <a href="deleteForm.php?formID=" class="btn btn-primary btn-lg"> <i class="fa fa-trash"></i> DELETE FORM</a>
+                            <button type="button" class="btn btn-dark btn-lg close" data-bs-dismiss="modal" aria-label="Close">
+                                <i class='fa fa-times-circle'></i> CANCEL
+                            </button>
+                            <a href="deleteForm.php?formID=" class="btn btn-primary btn-lg">
+                                <i class="fa fa-trash"></i> DELETE FORM
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -190,16 +243,16 @@ $conn = $pdo->open();
     $(document).ready(function () {
         // Initialize DataTable
         $("#dataTable").DataTable({
-            order: [[0, 'asc']],
+            order: [[0, 'desc']],
             responsive: true
         });
 
-        // Handle click event on delete button within the modal
+        // Inject selected formID into delete URL when modal opens
         $('#deleteModal').on('show.bs.modal', function (event) {
-            var button = $(event.relatedTarget); // Button that triggered the modal
-            var pageID = button.data('id'); // Extract info from data-* attributes
+            var button = $(event.relatedTarget);
+            var formID = button.data('id');
             var modal = $(this);
-            var deleteUrl = "deleteForm.php?formID=" + pageID;
+            var deleteUrl = "deleteForm.php?formID=" + formID;
             modal.find('.btn-primary').attr('href', deleteUrl);
         });
     });

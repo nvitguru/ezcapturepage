@@ -1,4 +1,13 @@
 <?php
+/**
+ * view-pages.php
+ *
+ * Responsibilities:
+ * - Require an authenticated session
+ * - Query and display all capture pages for the logged-in user
+ * - Show associated form (via content.formID), status, and actions (toggle/edit/delete)
+ */
+
 /** @var Database $pdo */
 session_start();
 
@@ -8,10 +17,17 @@ $tab = "form";
 include '../includes/session.php';
 include '../includes/settings.php';
 
+/**
+ * Auth guard: only allow logged-in members.
+ */
 if (!isset($_SESSION['user'])) {
     header('location: index.php');
+    exit;
 }
 
+/**
+ * Open database connection.
+ */
 $conn = $pdo->open();
 
 ?>
@@ -70,7 +86,7 @@ $conn = $pdo->open();
 
                     <?php include_once 'includes/alerts.php' ?>
 
-                    <!-- View All Forms Start -->
+                    <!-- View All Pages Start -->
                     <div class='col-lg-8'>
                         <div class="card">
                             <div class="card-body">
@@ -87,59 +103,103 @@ $conn = $pdo->open();
                                         </thead>
                                         <tbody>
                                         <?php
-                                        $conn = $pdo->open();
-
+                                        /**
+                                         * Fetch pages for the logged-in user.
+                                         * Determine associated form via:
+                                         * pages.pageID -> content.pageID -> content.formID -> form.formID
+                                         */
                                         try {
-                                            $pagesStmt = $conn->prepare("SELECT * FROM `pages` WHERE `userID` = :userID");
+                                            $pagesStmt   = $conn->prepare("SELECT * FROM `pages` WHERE `userID` = :userID");
                                             $contentStmt = $conn->prepare("SELECT * FROM `content` WHERE `pageID` = :pageID");
-                                            $formStmt = $conn->prepare("SELECT * FROM `form` WHERE `formID` = :formID");
+                                            $formStmt    = $conn->prepare("SELECT * FROM `form` WHERE `formID` = :formID");
+
                                             $pagesStmt->execute(['userID' => $user['userID']]);
                                             $pages = $pagesStmt->fetchAll();
+
                                             foreach ($pages as $row) {
+
+                                                // Default form name if content/form not found
+                                                $formName = '—';
+
+                                                // Lookup content by pageID
                                                 $contentStmt->execute(['pageID' => $row['pageID']]);
                                                 $content = $contentStmt->fetch();
-                                                $formStmt->execute(['formID' => $content['formID']]);
-                                                $form = $formStmt->fetch();
-                                                if($row['active']){
-                                                    $statusColor = "warning";
-                                                    $statusIcon = "fa-pause-circle";
-                                                    $toggleAction = "Deactivate";
-                                                    $deleteBtn = "<li><a href='javascript:void(0)' data-bs-toggle='tooltip' data-bs-placement='auto' title='Attention! This page is currently PUBLISHED. To delete, please deactivate the page first.' disabled><i class='fa fa-trash fa-2x text-dark'></i></a></li>";
-                                                } else {
-                                                    $statusColor = "success";
-                                                    $statusIcon = "fa-play-circle";
-                                                    $toggleAction = "Publish";
-                                                    $deleteBtn = "<li><a href='#deleteModal' data-bs-toggle='modal' data-id='". $row['pageID'] ."'><i class='fa fa-trash fa-2x text-dark'></i></a></li>";
-                                                }
-                                                $pagesStatus = $row['active'] ? "<span class='badge rounded-pill badge-success'>ACTIVE</span>" : "<span class='badge rounded-pill badge-warning'>INACTIVE</span>";
 
+                                                // Lookup form by content.formID (if present)
+                                                if ($content && !empty($content['formID'])) {
+                                                    $formStmt->execute(['formID' => $content['formID']]);
+                                                    $form = $formStmt->fetch();
+                                                    if ($form && isset($form['name'])) {
+                                                        $formName = $form['name'];
+                                                    }
+                                                }
+
+                                                /**
+                                                 * UI helpers based on active status.
+                                                 */
+                                                $isActive = !empty($row['active']);
+                                                $pagesStatus = $isActive
+                                                    ? "<span class='badge rounded-pill badge-success'>ACTIVE</span>"
+                                                    : "<span class='badge rounded-pill badge-warning'>INACTIVE</span>";
+
+                                                if ($isActive) {
+                                                    $statusColor  = "warning";
+                                                    $statusIcon   = "fa-pause-circle";
+                                                    $toggleAction = "Deactivate";
+                                                    $deleteBtn    = "<li><a href='javascript:void(0)' data-bs-toggle='tooltip' data-bs-placement='auto' title='Attention! This page is currently PUBLISHED. To delete, please deactivate the page first.' disabled><i class='fa fa-trash fa-2x text-dark'></i></a></li>";
+                                                } else {
+                                                    $statusColor  = "success";
+                                                    $statusIcon   = "fa-play-circle";
+                                                    $toggleAction = "Publish";
+                                                    $deleteBtn    = "<li><a href='#deleteModal' data-bs-toggle='modal' data-id='". $row['pageID'] ."'><i class='fa fa-trash fa-2x text-dark'></i></a></li>";
+                                                }
+
+                                                /**
+                                                 * Note: hidden ID column is used for sorting.
+                                                 * Use pageID (matches toggle/edit/delete identifiers).
+                                                 */
                                                 echo "
                                                 <tr>
-                                                    <td class='d-none'>". $row['id'] ."</td>
+                                                    <td class='d-none'>". $row['pageID'] ."</td>
                                                     <td><h5>". $row['name'] ."</h5></td>
-                                                    <td><h5>". $form['name'] ."</4></td>
+                                                    <td><h5>". $formName ."</h5></td>
                                                     <td><h5>$pagesStatus</h5></td>
                                                     <td>
                                                         <ul class='action'>
                                                             <li class='text-success me-4'>
-                                                                <form id='togglePage' method='post' action='togglePage.php'>
+                                                                <form method='post' action='togglePage.php' class='d-inline'>
                                                                     <input type='hidden' name='pageID' value='". $row['pageID'] ."'>
-                                                                    <button type='submit' class='text-". $statusColor ."' name='togglePage' style='background: none; border: none; padding: 0; cursor: pointer;'>
-                                                                        <a data-bs-toggle='tooltip' data-bs-placement='auto' title='". $toggleAction ." Page'><i class='fa ". $statusIcon ." fa-2x'></i></a>
+                                                                    <button
+                                                                        type='submit'
+                                                                        class='text-". $statusColor ."'
+                                                                        name='togglePage'
+                                                                        style='background: none; border: none; padding: 0; cursor: pointer;'
+                                                                        data-bs-toggle='tooltip'
+                                                                        data-bs-placement='auto'
+                                                                        title='". $toggleAction ." Page'
+                                                                    >
+                                                                        <i class='fa ". $statusIcon ." fa-2x'></i>
                                                                     </button>
                                                                 </form>
                                                             </li>
-                                                            <li class='me-4'> <a href='page.php?pageID=". $row['pageID'] ."' data-bs-toggle='tooltip' data-bs-placement='auto' title='Edit Page'><i class='fa fa-edit fa-2x'></i></a></li>
+                                                            <li class='me-4'>
+                                                                <a href='page.php?pageID=". $row['pageID'] ."' data-bs-toggle='tooltip' data-bs-placement='auto' title='Edit Page'>
+                                                                    <i class='fa fa-edit fa-2x'></i>
+                                                                </a>
+                                                            </li>
                                                             ". $deleteBtn ."
                                                         </ul>
                                                     </td>
                                                 </tr>";
-                                                }
+                                            }
                                         } catch (PDOException $e) {
                                             echo $e->getMessage();
                                         }
 
-                                            $pdo->close();
+                                        /**
+                                         * Close DB connection via wrapper.
+                                         */
+                                        $pdo->close();
                                         ?>
                                         </tbody>
                                     </table>
@@ -147,7 +207,7 @@ $conn = $pdo->open();
                             </div>
                         </div>
                     </div>
-                    <!-- View All Forms End -->
+                    <!-- View All Pages End -->
 
                 </div>
             </div>
@@ -176,8 +236,12 @@ $conn = $pdo->open();
                     </div>
                     <div class="col-12 d-grid">
                         <div class="btn-group" role="group" aria-label="Basic example">
-                            <button type="button" class="btn btn-dark btn-lg close" data-bs-dismiss="modal" aria-label="Close"><i class='fa fa-times-circle'></i> CANCEL</button>
-                            <a href="deletePage.php?pageID=" class="btn btn-primary btn-lg"> <i class="fa fa-trash"></i> DELETE PAGE</a>
+                            <button type="button" class="btn btn-dark btn-lg close" data-bs-dismiss="modal" aria-label="Close">
+                                <i class='fa fa-times-circle'></i> CANCEL
+                            </button>
+                            <a href="deletePage.php?pageID=" class="btn btn-primary btn-lg">
+                                <i class="fa fa-trash"></i> DELETE PAGE
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -195,14 +259,14 @@ $conn = $pdo->open();
     $(document).ready(function () {
         // Initialize DataTable
         $("#dataTable").DataTable({
-            order: [[0, 'asc']],
+            order: [[0, 'desc']],
             responsive: true
         });
 
-        // Handle click event on delete button within the modal
+        // Inject selected pageID into delete URL when modal opens
         $('#deleteModal').on('show.bs.modal', function (event) {
-            var button = $(event.relatedTarget); // Button that triggered the modal
-            var pageID = button.data('id'); // Extract info from data-* attributes
+            var button = $(event.relatedTarget);
+            var pageID = button.data('id');
             var modal = $(this);
             var deleteUrl = "deletePage.php?pageID=" + pageID;
             modal.find('.btn-primary').attr('href', deleteUrl);

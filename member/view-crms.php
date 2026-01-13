@@ -1,4 +1,13 @@
 <?php
+/**
+ * view-crms.php
+ *
+ * Responsibilities:
+ * - Require an authenticated session
+ * - Query and display all CRMs for the logged-in user
+ * - Provide actions to toggle active status, edit, and delete (when inactive)
+ */
+
 /** @var Database $pdo */
 session_start();
 
@@ -8,10 +17,17 @@ $tab = "form";
 include '../includes/session.php';
 include '../includes/settings.php';
 
+/**
+ * Auth guard: only allow logged-in members.
+ */
 if (!isset($_SESSION['user'])) {
     header('location: index.php');
+    exit;
 }
 
+/**
+ * Open database connection.
+ */
 $conn = $pdo->open();
 
 ?>
@@ -70,7 +86,7 @@ $conn = $pdo->open();
 
                     <?php include_once 'includes/alerts.php' ?>
 
-                    <!-- View All Forms Start -->
+                    <!-- View All CRMs Start -->
                     <div class='col-lg-8'>
                         <div class="card">
                             <div class="card-body">
@@ -87,58 +103,87 @@ $conn = $pdo->open();
                                         </thead>
                                         <tbody>
                                         <?php
-                                        $conn = $pdo->open();
-
+                                        /**
+                                         * Fetch CRMs scoped to the logged-in user.
+                                         */
                                         try {
                                             $crmStmt = $conn->prepare("SELECT * FROM `crm` WHERE `userID` = :userID");
-                                            $crmStmt->execute(['userID'=> $user['userID']]);
+                                            $crmStmt->execute(['userID' => $user['userID']]);
                                             $crm = $crmStmt->fetchAll();
+
                                             foreach ($crm as $row) {
-                                                if($crm['crmType'] = 1){
+                                                /**
+                                                 * CRM Type mapping:
+                                                 * - 1 = Aweber
+                                                 * - 2 = GetResponse
+                                                 * - else = Internal CRM
+                                                 */
+                                                if ((int)$row['crmType'] === 1) {
                                                     $crmType = "Aweber";
-                                                } elseif ($crm['crmType'] = 2){
+                                                } elseif ((int)$row['crmType'] === 2) {
                                                     $crmType = "GetResponse";
-                                                } else{
+                                                } else {
                                                     $crmType = "Internal CRM";
                                                 }
-                                                $crmStatus = $row['active'] ? "<span class='badge rounded-pill badge-success'>ACTIVE</span>" : "<span class='badge rounded-pill badge-warning'>INACTIVE</span>";
-                                                if($row['active']){
-                                                    $statusColor = "warning";
-                                                    $statusIcon = "fa-pause-circle";
-                                                    $toggleAction = "Deactivate";
-                                                    $deleteBtn = "<li><a href='javascript:void(0)' data-bs-toggle='tooltip' data-bs-placement='auto' title='Attention! This CRM is currently ACTIVE. To delete, please deactivate the CRM first.' disabled><i class='fa fa-trash fa-2x text-dark'></i></a></li>";
+
+                                                /**
+                                                 * UI helpers based on active status.
+                                                 */
+                                                $isActive = !empty($row['active']);
+                                                $crmStatus = $isActive
+                                                    ? "<span class='badge rounded-pill badge-success'>ACTIVE</span>"
+                                                    : "<span class='badge rounded-pill badge-warning'>INACTIVE</span>";
+
+                                                if ($isActive) {
+                                                    $statusColor  = "warning";
+                                                    $statusIcon   = "fa-pause-circle";
+                                                    $toggleAction = "Deactivate"; // informational (not displayed)
+                                                    $deleteBtn    = "<li><a href='javascript:void(0)' data-bs-toggle='tooltip' data-bs-placement='auto' title='Attention! This CRM is currently ACTIVE. To delete, please deactivate the CRM first.' disabled><i class='fa fa-trash fa-2x text-dark'></i></a></li>";
                                                 } else {
-                                                    $statusColor = "success";
-                                                    $statusIcon = "fa-play-circle";
-                                                    $toggleAction = "Publish";
-                                                    $deleteBtn = "<li><a href='#deleteModal' data-bs-toggle='modal' data-id='". $row['crmID'] ."'><i class='fa fa-trash fa-2x text-dark'></i></a></li>";
+                                                    $statusColor  = "success";
+                                                    $statusIcon   = "fa-play-circle";
+                                                    $toggleAction = "Publish"; // informational (not displayed)
+                                                    $deleteBtn    = "<li><a href='#deleteModal' data-bs-toggle='modal' data-id='". $row['crmID'] ."'><i class='fa fa-trash fa-2x text-dark'></i></a></li>";
                                                 }
+
+                                                /**
+                                                 * Note: the hidden ID column is used for sorting in DataTables.
+                                                 * We use crmID to match the rest of this module’s identifiers.
+                                                 */
                                                 echo "
                                                 <tr>
-                                                    <td class='d-none'>" . $row['id'] ."</td>
-                                                    <td><h5>". $row['name'] ."</h5></td>
-                                                    <td><h5>". $crmType ."</h5></td>
+                                                    <td class='d-none'>" . $row['crmID'] . "</td>
+                                                    <td><h5>" . $row['name'] . "</h5></td>
+                                                    <td><h5>" . $crmType . "</h5></td>
                                                     <td><h5>$crmStatus</h5></td>
                                                     <td>
                                                         <ul class='action'>
                                                             <li class='text-success me-4'>
-                                                            <form id='toggleCRM' method='post' action='toggleCRM.php'>
-                                                                <input type='hidden' name='crmID' value='". $row['crmID'] ."'>
-                                                                <button type='submit' class='text-". $statusColor ."' name='toggleCRM' style='background: none; border: none; padding: 0; cursor: pointer;'>
-                                                                    <a><i class='fa ". $statusIcon ." fa-2x'></i></a></li>
-                                                                </button>
-                                                            </form>
-                                                            <li class='me-4'> <a href='crm.php?crmID=". $row['crmID'] ."'><i class='fa fa-edit fa-2x'></i></a></li>
-                                                            ". $deleteBtn ."
+                                                                <form method='post' action='toggleCRM.php' class='d-inline'>
+                                                                    <input type='hidden' name='crmID' value='" . $row['crmID'] . "'>
+                                                                    <button type='submit' name='toggleCRM' class='text-" . $statusColor . "' style='background: none; border: none; padding: 0; cursor: pointer;'>
+                                                                        <i class='fa " . $statusIcon . " fa-2x'></i>
+                                                                    </button>
+                                                                </form>
+                                                            </li>
+                                                            <li class='me-4'>
+                                                                <a href='crm.php?crmID=" . $row['crmID'] . "'>
+                                                                    <i class='fa fa-edit fa-2x'></i>
+                                                                </a>
+                                                            </li>
+                                                            " . $deleteBtn . "
                                                         </ul>
                                                     </td>
                                                 </tr>";
-                                                }
+                                            }
                                         } catch (PDOException $e) {
                                             echo $e->getMessage();
                                         }
 
-                                            $pdo->close();
+                                        /**
+                                         * Close DB connection via wrapper.
+                                         */
+                                        $pdo->close();
                                         ?>
                                         </tbody>
                                     </table>
@@ -146,7 +191,7 @@ $conn = $pdo->open();
                             </div>
                         </div>
                     </div>
-                    <!-- View All Forms End -->
+                    <!-- View All CRMs End -->
 
                 </div>
             </div>
@@ -175,8 +220,12 @@ $conn = $pdo->open();
                     </div>
                     <div class="col-12 d-grid">
                         <div class="btn-group" role="group" aria-label="Basic example">
-                            <button type="button" class="btn btn-dark btn-lg close" data-bs-dismiss="modal" aria-label="Close"><i class='fa fa-times-circle'></i> CANCEL</button>
-                            <a href="deleteCRM.php?crmID=" class="btn btn-primary btn-lg"> <i class="fa fa-trash"></i> DELETE CRM</a>
+                            <button type="button" class="btn btn-dark btn-lg close" data-bs-dismiss="modal" aria-label="Close">
+                                <i class='fa fa-times-circle'></i> CANCEL
+                            </button>
+                            <a href="deleteCRM.php?crmID=" class="btn btn-primary btn-lg">
+                                <i class="fa fa-trash"></i> DELETE CRM
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -192,18 +241,23 @@ $conn = $pdo->open();
 
 <script>
     $(document).ready(function () {
-        // Initialize DataTable
+        /**
+         * Initialize DataTable.
+         * The hidden first column is used for ordering.
+         */
         $("#dataTable").DataTable({
-            order: [[0, 'asc']],
+            order: [[0, 'desc']],
             responsive: true
         });
 
-        // Handle click event on delete button within the modal
+        /**
+         * Delete modal: inject the selected crmID into the delete URL.
+         */
         $('#deleteModal').on('show.bs.modal', function (event) {
-            var button = $(event.relatedTarget); // Button that triggered the modal
-            var pageID = button.data('id'); // Extract info from data-* attributes
+            var button = $(event.relatedTarget);
+            var crmID = button.data('id');
             var modal = $(this);
-            var deleteUrl = "deleteCRM.php?crmID=" + pageID;
+            var deleteUrl = "deleteCRM.php?crmID=" + crmID;
             modal.find('.btn-primary').attr('href', deleteUrl);
         });
     });
