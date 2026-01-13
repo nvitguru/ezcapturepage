@@ -1,322 +1,405 @@
-document.addEventListener("DOMContentLoaded", function () {
-    // Function to update image source and class management
-    function updateSelection(groupName, imgId, noImgId, selectionClass, iconClass, folder) {
-        const imgElement = document.getElementById(imgId);
+document.addEventListener("DOMContentLoaded", () => {
+    "use strict";
 
-        document.querySelectorAll(`input[name='${groupName}']`).forEach(function (input) {
-            input.addEventListener('change', function () {
-                if (this.checked) {
-                    if (this.id === noImgId) {
-                        imgElement.classList.add('d-none');
-                    } else {
-                        let imgSrc = `https://ezcapturepage.com/images/${folder}/${this.id}.png`;
-                        imgElement.src = imgSrc;
-                        imgElement.classList.remove('d-none');
-                    }
+    const BASE_IMG_URL = "https://ezcapturepage.com/images";
 
-                    document.querySelectorAll(`.${selectionClass}.${groupName}`).forEach(function (div) {
-                        div.classList.remove(selectionClass);
-                        div.querySelector(`.${iconClass}`).classList.add('d-none');
-                    });
+    // ---------- DOM Helpers ----------
+    const qs = (sel, root = document) => root.querySelector(sel);
+    const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-                    if (this.id !== noImgId) {
-                        this.closest('div').classList.add(selectionClass, groupName);
-                        this.closest('div').querySelector(`.${iconClass}`).classList.remove('d-none');
-                    }
+    const addHidden = (el) => el && el.classList.add("d-none");
+    const removeHidden = (el) => el && el.classList.remove("d-none");
+
+    const clearSelection = (selectionClass, groupName, iconClass) => {
+        qsa(`.${selectionClass}.${groupName}`).forEach((div) => {
+            div.classList.remove(selectionClass);
+
+            const icon = div.querySelector(`.${iconClass}`);
+            if (icon) addHidden(icon);
+        });
+    };
+
+    const markSelected = (input, selectionClass, groupName, iconClass) => {
+        const wrapper = input.closest("div");
+        if (!wrapper) return;
+
+        wrapper.classList.add(selectionClass, groupName);
+
+        const icon = wrapper.querySelector(`.${iconClass}`);
+        if (icon) removeHidden(icon);
+    };
+
+    // ---------- Color Handling ----------
+    const getCurrentColor = () => {
+        const checked = qs("input[name='color']:checked");
+        // fallback keeps JS stable even if color radios are missing
+        return checked ? checked.value : "blue";
+    };
+
+    const setImgFromId = (imgEl, folder, id, colorScoped = false) => {
+        if (!imgEl) return;
+
+        if (colorScoped) {
+            const color = getCurrentColor();
+            imgEl.src = `${BASE_IMG_URL}/${folder}/${color}/${id}.png`;
+        } else {
+            imgEl.src = `${BASE_IMG_URL}/${folder}/${id}.png`;
+        }
+
+        removeHidden(imgEl);
+    };
+
+    // Update selector thumbnails in the accordion when color changes.
+    // This updates <img src="../images/header/{color}/{name}.png"> and <img src="../images/button/{color}/{name}.png">
+    const updateColorScopedThumbnails = (folder, newColor) => {
+        // Looks for images in the selection area that include `/images/{folder}/...`
+        // Example: ../images/header/red/something.png
+        const imgs = qsa(`img[src*="/images/${folder}/"]`);
+        imgs.forEach((img) => {
+            const src = img.getAttribute("src") || "";
+
+            // Replace the color segment after `/images/{folder}/`
+            // ../images/header/blue/foo.png -> ../images/header/red/foo.png
+            const pattern = new RegExp(`(/images/${folder}/)([^/]+)(/)`, "i");
+            if (pattern.test(src)) {
+                img.setAttribute("src", src.replace(pattern, `$1${newColor}$3`));
+            }
+        });
+    };
+
+    const refreshColorDependentPreview = () => {
+        const color = getCurrentColor();
+
+        // Update header preview if selected and not "noHeader"
+        const headerChecked = qs("input[name='header']:checked");
+        if (headerChecked && headerChecked.id && headerChecked.id !== "noHeader") {
+            const headerImg = document.getElementById("page-header-img");
+            setImgFromId(headerImg, "header", headerChecked.id, true);
+        }
+
+        // Update button preview if selected
+        const buttonChecked = qs("input[name='button']:checked");
+        if (buttonChecked && buttonChecked.id) {
+            const buttonImg = document.getElementById("page-button-img");
+            setImgFromId(buttonImg, "button", buttonChecked.id, true);
+        }
+
+        // Update the selector thumbnails in the accordions
+        updateColorScopedThumbnails("header", color);
+        updateColorScopedThumbnails("button", color);
+    };
+
+    const bindColorSelection = () => {
+        const colorInputs = qsa("input[name='color']");
+        if (!colorInputs.length) return;
+
+        colorInputs.forEach((input) => {
+            input.addEventListener("change", () => {
+                if (input.checked) {
+                    refreshColorDependentPreview();
                 }
             });
         });
-    }
 
-    // Function to update image source and class management for button
-    function updateButtonSelection(groupName, imgId, selectionClass, iconClass, folder) {
-        const imgElement = document.getElementById(imgId);
+        // Initial paint
+        refreshColorDependentPreview();
+    };
 
-        document.querySelectorAll(`input[name='${groupName}']`).forEach(function (input) {
-            input.addEventListener('change', function () {
-                if (this.checked) {
-                    let imgSrc = `https://ezcapturepage.com/images/${folder}/${this.id}.png`;
-                    imgElement.src = imgSrc;
-                    imgElement.classList.remove('d-none');
+    // ---------- Piece Selection (header/subheader) ----------
+    const bindPieceSelection = ({
+                                    groupName,
+                                    imgId,
+                                    noId,
+                                    selectionClass,
+                                    iconClass,
+                                    folder,
+                                    colorScoped = false
+                                }) => {
+        const imgEl = document.getElementById(imgId);
+        const inputs = qsa(`input[name='${groupName}']`);
+        if (!inputs.length) return;
 
-                    document.querySelectorAll(`.${selectionClass}.${groupName}`).forEach(function (div) {
-                        div.classList.remove(selectionClass);
-                        div.querySelector(`.${iconClass}`).classList.add('d-none');
-                    });
+        const apply = (input) => {
+            if (!input) return;
 
-                    this.closest('div').classList.add(selectionClass, groupName);
-                    this.closest('div').querySelector(`.${iconClass}`).classList.remove('d-none');
-                }
-            });
-        });
-    }
-
-    // Function to set initial state based on checked input
-    function setInitialState(groupName, imgId, noImgId, selectionClass, iconClass, folder) {
-        const checkedInput = document.querySelector(`input[name='${groupName}']:checked`);
-        const imgElement = document.getElementById(imgId);
-
-        if (checkedInput) {
-            if (checkedInput.id === noImgId) {
-                imgElement.classList.add('d-none');
+            // Update image
+            if (input.id === noId) {
+                addHidden(imgEl);
             } else {
-                let imgSrc = `https://ezcapturepage.com/images/${folder}/${checkedInput.id}.png`;
-                imgElement.src = imgSrc;
-                imgElement.classList.remove('d-none');
+                setImgFromId(imgEl, folder, input.id, colorScoped);
             }
 
-            if (checkedInput.id !== noImgId) {
-                checkedInput.closest('div').classList.add(selectionClass, groupName);
-                checkedInput.closest('div').querySelector(`.${iconClass}`).classList.remove('d-none');
+            // Update selection UI
+            clearSelection(selectionClass, groupName, iconClass);
+
+            if (input.id !== noId) {
+                markSelected(input, selectionClass, groupName, iconClass);
             }
-        }
-    }
+        };
 
-    // Function to set initial state based on checked input for buttons
-    function setInitialButtonState(groupName, imgId, selectionClass, iconClass, folder) {
-        const checkedInput = document.querySelector(`input[name='${groupName}']:checked`);
-        const imgElement = document.getElementById(imgId);
-
-        if (checkedInput) {
-            let imgSrc = `https://ezcapturepage.com/images/${folder}/${checkedInput.id}.png`;
-            imgElement.src = imgSrc;
-            imgElement.classList.remove('d-none');
-
-            checkedInput.closest('div').classList.add(selectionClass, groupName);
-            checkedInput.closest('div').querySelector(`.${iconClass}`).classList.remove('d-none');
-        }
-    }
-
-    // Apply the functions to the header and subheader radios
-    updateSelection('header', 'page-header-img', 'noHeader', 'piece-selected', 'selected-check', 'header');
-    setInitialState('header', 'page-header-img', 'noHeader', 'piece-selected', 'selected-check', 'header');
-
-    updateSelection('subheader', 'page-subheader-img', 'noSubheader', 'piece-selected', 'selected-check', 'subheader');
-    setInitialState('subheader', 'page-subheader-img', 'noSubheader', 'piece-selected', 'selected-check', 'subheader');
-
-    // Apply the functions to the button radios
-    updateButtonSelection('button', 'page-button-img', 'piece-selected', 'selected-check', 'button');
-    setInitialButtonState('button', 'page-button-img', 'piece-selected', 'selected-check', 'button');
-
-    // Apply the functions to the background radios
-    function updateBackgroundSelection() {
-        const backgroundGroupName = 'background';
-        const noBackgroundId = 'noBackground';
-        const selectionClass = 'piece-selected';
-        const iconClass = 'selected-check';
-
-        document.querySelectorAll(`input[name='${backgroundGroupName}']`).forEach(function (input) {
-            input.addEventListener('change', function () {
-                if (this.checked) {
-                    document.querySelectorAll(`.${selectionClass}.${backgroundGroupName}`).forEach(function (div) {
-                        div.classList.remove(selectionClass);
-                        div.querySelector(`.${iconClass}`).classList.add('d-none');
-                    });
-
-                    if (this.id !== noBackgroundId) {
-                        this.closest('div').classList.add(selectionClass, backgroundGroupName);
-                        this.closest('div').querySelector(`.${iconClass}`).classList.remove('d-none');
-                    }
-                }
+        inputs.forEach((input) => {
+            input.addEventListener("change", () => {
+                if (input.checked) apply(input);
             });
         });
 
-        // Set initial state based on checked input from database
-        const checkedInput = document.querySelector(`input[name='${backgroundGroupName}']:checked`);
-        if (checkedInput && checkedInput.id !== noBackgroundId) {
-            checkedInput.closest('div').classList.add(selectionClass, backgroundGroupName);
-            checkedInput.closest('div').querySelector(`.${iconClass}`).classList.remove('d-none');
-        }
-    }
-
-    updateBackgroundSelection();
-
-    // Video Embed functionality
-    const videoEmbedInput = document.getElementById('videoEmbed');
-    const pageVideoImg = document.getElementById('page-video-img');
-    const videoDiv = document.getElementById('videoDiv');
-    const videoSource = document.getElementById('videoSource');
-    const noVideoCheckbox = document.getElementById('noVideo');
-
-    videoEmbedInput.addEventListener('input', function () {
-        if (videoEmbedInput.value.trim() !== '') {
-            pageVideoImg.classList.add('d-none');
-            videoDiv.classList.remove('d-none');
-            videoSource.src = videoEmbedInput.value;
-            noVideoCheckbox.checked = false;
-        } else {
-            pageVideoImg.classList.remove('d-none');
-            videoDiv.classList.add('d-none');
-            videoSource.src = '';
-        }
-    });
-
-    noVideoCheckbox.addEventListener('change', function () {
-        if (this.checked) {
-            pageVideoImg.classList.add('d-none');
-            videoDiv.classList.add('d-none');
-            videoSource.src = '';
-            videoEmbedInput.value = '';
-        } else if (videoEmbedInput.value.trim() !== '') {
-            pageVideoImg.classList.add('d-none');
-            videoDiv.classList.remove('d-none');
-            videoSource.src = videoEmbedInput.value;
-        } else {
-            pageVideoImg.classList.remove('d-none');
-            videoDiv.classList.add('d-none');
-            videoSource.src = '';
-        }
-    });
-
-    // Set initial state for video embed
-    if (videoEmbedInput.value.trim() !== '') {
-        pageVideoImg.classList.add('d-none');
-        videoDiv.classList.remove('d-none');
-        videoSource.src = videoEmbedInput.value;
-        noVideoCheckbox.checked = false;
-    } else {
-        pageVideoImg.classList.remove('d-none');
-        videoDiv.classList.add('d-none');
-        videoSource.src = '';
-    }
-
-    // Ensure page-video-img is hidden if noVideo is selected on page load
-    if (noVideoCheckbox.checked) {
-        pageVideoImg.classList.add('d-none');
-        videoDiv.classList.add('d-none');
-        videoSource.src = '';
-    }
-
-    const disclaimerTextarea = document.getElementById("disclaimer");
-    const pageDisclaimerImg = document.getElementById("page-disclaimer-img");
-    const disclaimerP = document.getElementById("disclaimerP");
-    const disclaimerText = document.getElementById("disclaimerText");
-
-    // Function to update the disclaimer text
-    function updateDisclaimerText() {
-        const text = disclaimerTextarea.value;
-        if (text.trim() !== "") {
-            pageDisclaimerImg.classList.add("d-none");
-            disclaimerP.classList.remove("d-none");
-            disclaimerText.textContent = text;
-        } else {
-            pageDisclaimerImg.classList.remove("d-none");
-            disclaimerP.classList.add("d-none");
-        }
-    }
-
-    // Event listener for textarea input
-    disclaimerTextarea.addEventListener("input", updateDisclaimerText);
-
-    // Check initial content from the database
-    if (disclaimerTextarea.value.trim() !== "") {
-        updateDisclaimerText();
-    }
-
-    const formRadios = document.getElementById('formRadios');
-    const formTemplate = document.getElementById('formTemplate');
-    const selectedForm = document.getElementById('selectedForm');
-
-    // Function to show selected form details
-    const showFormDetails = (formID) => {
-        // Fetch form details from the server
-        fetch(`fetchForm.php?formID=${formID}`)
-            .then(response => response.json())
-            .then(data => {
-                // Populate the form details based on the response
-                if (data) {
-                    console.log('Form data:', data);
-                    // Hide form template and show selected form
-                    formTemplate.classList.add('d-none');
-                    selectedForm.classList.remove('d-none');
-
-                    // Update form fields based on data
-                    const fullNameDiv = document.getElementById('fullNameDiv');
-                    const splitNameDiv = document.getElementById('splitNameDiv');
-                    const phoneDiv = document.getElementById('phoneDiv');
-                    const humanDiv = document.getElementById('humanDiv');
-
-                    if (fullNameDiv) {
-                        if (data.formName == 1) {
-                            fullNameDiv.classList.remove('d-none');
-                            splitNameDiv.classList.add('d-none');
-                        } else if (data.formName == 2) {
-                            fullNameDiv.classList.add('d-none');
-                            splitNameDiv.classList.remove('d-none');
-                        }
-                    }
-
-                    if (phoneDiv) {
-                        if (data.formPhone) {
-                            phoneDiv.classList.remove('d-none');
-                        } else {
-                            phoneDiv.classList.add('d-none');
-                        }
-                    }
-
-                    if (humanDiv) {
-                        if (data.formHuman) {
-                            humanDiv.classList.remove('d-none');
-                        } else {
-                            humanDiv.classList.add('d-none');
-                        }
-                    }
-                }
-            })
-            .catch(error => console.error('Error fetching form details:', error));
+        // Initial state
+        apply(qs(`input[name='${groupName}']:checked`));
     };
 
-    // Event listener for form radio buttons
-    formRadios.addEventListener('change', function (event) {
-        if (event.target.name === 'form') {
-            const selectedFormID = event.target.value;
-            showFormDetails(selectedFormID);
-        }
-    });
+    // ---------- Button Selection ----------
+    const bindButtonSelection = ({
+                                     groupName,
+                                     imgId,
+                                     selectionClass,
+                                     iconClass,
+                                     folder,
+                                     colorScoped = false
+                                 }) => {
+        const imgEl = document.getElementById(imgId);
+        const inputs = qsa(`input[name='${groupName}']`);
+        if (!inputs.length) return;
 
-    // Initial load: check if a form is already selected
-    const initiallySelectedForm = document.querySelector('input[name="form"]:checked');
-    if (initiallySelectedForm) {
-        showFormDetails(initiallySelectedForm.value);
-    }
-});
-document.addEventListener("DOMContentLoaded", function () {
-    const noVideoCheckbox = document.getElementById("noVideo");
-    const videoEmbedInput = document.getElementById("videoEmbed");
+        const apply = (input) => {
+            if (!input) return;
 
-    // Function to toggle input state
-    const toggleVideoInput = () => {
-        if (noVideoCheckbox.checked) {
-            videoEmbedInput.value = ""; // Clear input when disabled
-            videoEmbedInput.setAttribute("disabled", "disabled");
-        } else {
+            setImgFromId(imgEl, folder, input.id, colorScoped);
+
+            clearSelection(selectionClass, groupName, iconClass);
+            markSelected(input, selectionClass, groupName, iconClass);
+        };
+
+        inputs.forEach((input) => {
+            input.addEventListener("change", () => {
+                if (input.checked) apply(input);
+            });
+        });
+
+        // Initial state
+        apply(qs(`input[name='${groupName}']:checked`));
+    };
+
+    // ---------- Background Selection ----------
+    const bindBackgroundSelection = () => {
+        const groupName = "background";
+        const noId = "noBackground";
+        const selectionClass = "piece-selected";
+        const iconClass = "selected-check";
+
+        const inputs = qsa(`input[name='${groupName}']`);
+        if (!inputs.length) return;
+
+        const apply = (input) => {
+            if (!input) return;
+
+            clearSelection(selectionClass, groupName, iconClass);
+
+            if (input.id !== noId) {
+                markSelected(input, selectionClass, groupName, iconClass);
+            }
+        };
+
+        inputs.forEach((input) => {
+            input.addEventListener("change", () => {
+                if (input.checked) apply(input);
+            });
+        });
+
+        // Initial state
+        const checked = qs(`input[name='${groupName}']:checked`);
+        if (checked) apply(checked);
+    };
+
+    // ---------- Video Embed ----------
+    const initVideoEmbed = () => {
+        const videoEmbedInput = document.getElementById("videoEmbed");
+        const pageVideoImg = document.getElementById("page-video-img");
+        const videoDiv = document.getElementById("videoDiv");
+        const videoSource = document.getElementById("videoSource");
+        const noVideoCheckbox = document.getElementById("noVideo");
+
+        if (!videoEmbedInput || !noVideoCheckbox) return;
+
+        const render = () => {
+            const hasEmbed = videoEmbedInput.value.trim() !== "";
+
+            if (noVideoCheckbox.checked) {
+                addHidden(pageVideoImg);
+                addHidden(videoDiv);
+                if (videoSource) videoSource.src = "";
+                videoEmbedInput.value = "";
+                videoEmbedInput.setAttribute("disabled", "disabled");
+                return;
+            }
+
             videoEmbedInput.removeAttribute("disabled");
-        }
+
+            if (hasEmbed) {
+                addHidden(pageVideoImg);
+                removeHidden(videoDiv);
+                if (videoSource) videoSource.src = videoEmbedInput.value;
+            } else {
+                removeHidden(pageVideoImg);
+                addHidden(videoDiv);
+                if (videoSource) videoSource.src = "";
+            }
+        };
+
+        videoEmbedInput.addEventListener("input", () => {
+            if (videoEmbedInput.value.trim() !== "") {
+                noVideoCheckbox.checked = false;
+            }
+            render();
+        });
+
+        noVideoCheckbox.addEventListener("change", render);
+
+        // Initial state
+        render();
     };
 
-    // Attach event listener
-    noVideoCheckbox.addEventListener("change", toggleVideoInput);
+    // ---------- Disclaimer ----------
+    const initDisclaimer = () => {
+        const disclaimerTextarea = document.getElementById("disclaimer");
+        const pageDisclaimerImg = document.getElementById("page-disclaimer-img");
+        const disclaimerP = document.getElementById("disclaimerP");
+        const disclaimerText = document.getElementById("disclaimerText");
 
-    // Initial toggle state on page load
-    toggleVideoInput();
-});
-document.addEventListener("DOMContentLoaded", function () {
-    // Add event listeners for all accordion buttons
-    const accordionButtons = document.querySelectorAll(".accordionBtn");
+        if (!disclaimerTextarea) return;
 
-    accordionButtons.forEach(button => {
-        button.addEventListener("click", function () {
-            // Check if the accordion is being expanded
-            const targetId = this.getAttribute("data-bs-target");
-            const targetElement = document.querySelector(targetId);
+        const render = () => {
+            const text = disclaimerTextarea.value;
 
-            if (targetElement && targetElement.classList.contains("show") === false) {
-                // Scroll to the top of the page
-                window.scrollTo({
-                    top: 0,
-                    behavior: "smooth" // Smooth scrolling
-                });
+            if (text.trim() !== "") {
+                addHidden(pageDisclaimerImg);
+                removeHidden(disclaimerP);
+                if (disclaimerText) disclaimerText.textContent = text;
+            } else {
+                removeHidden(pageDisclaimerImg);
+                addHidden(disclaimerP);
+            }
+        };
+
+        disclaimerTextarea.addEventListener("input", render);
+
+        // Initial state
+        render();
+    };
+
+    // ---------- Form Details ----------
+    const initFormSelection = () => {
+        const formRadios = document.getElementById("formRadios");
+        const formTemplate = document.getElementById("formTemplate");
+        const selectedForm = document.getElementById("selectedForm");
+
+        if (!formRadios) return;
+
+        const fullNameDiv = document.getElementById("fullNameDiv");
+        const splitNameDiv = document.getElementById("splitNameDiv");
+        const phoneDiv = document.getElementById("phoneDiv");
+        const humanDiv = document.getElementById("humanDiv");
+
+        const applyFormData = (data) => {
+            if (!data) return;
+
+            if (formTemplate) addHidden(formTemplate);
+            if (selectedForm) removeHidden(selectedForm);
+
+            if (fullNameDiv && splitNameDiv) {
+                if (String(data.formName) === "1") {
+                    removeHidden(fullNameDiv);
+                    addHidden(splitNameDiv);
+                } else if (String(data.formName) === "2") {
+                    addHidden(fullNameDiv);
+                    removeHidden(splitNameDiv);
+                }
+            }
+
+            if (phoneDiv) {
+                data.formPhone ? removeHidden(phoneDiv) : addHidden(phoneDiv);
+            }
+
+            if (humanDiv) {
+                data.formHuman ? removeHidden(humanDiv) : addHidden(humanDiv);
+            }
+        };
+
+        const showFormDetails = (formID) => {
+            if (!formID) return;
+
+            fetch(`fetchForm.php?formID=${encodeURIComponent(formID)}`)
+                .then((response) => response.json())
+                .then(applyFormData)
+                .catch((error) => console.error("Error fetching form details:", error));
+        };
+
+        formRadios.addEventListener("change", (event) => {
+            if (event.target && event.target.name === "form") {
+                showFormDetails(event.target.value);
             }
         });
+
+        // Initial load
+        const initiallySelectedForm = qs('input[name="form"]:checked');
+        if (initiallySelectedForm) {
+            showFormDetails(initiallySelectedForm.value);
+        }
+    };
+
+    // ---------- Accordion Scroll ----------
+    const initAccordionScroll = () => {
+        const buttons = qsa(".accordionBtn");
+        if (!buttons.length) return;
+
+        buttons.forEach((btn) => {
+            btn.addEventListener("click", function () {
+                const targetId = this.getAttribute("data-bs-target");
+                if (!targetId) return;
+
+                const targetEl = qs(targetId);
+                if (targetEl && !targetEl.classList.contains("show")) {
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                }
+            });
+        });
+    };
+
+    // ---------- Bindings ----------
+    // Color changes affect Header + Button preview + thumbnails
+    bindColorSelection();
+
+    bindPieceSelection({
+        groupName: "header",
+        imgId: "page-header-img",
+        noId: "noHeader",
+        selectionClass: "piece-selected",
+        iconClass: "selected-check",
+        folder: "header",
+        colorScoped: true
     });
+
+    bindPieceSelection({
+        groupName: "subheader",
+        imgId: "page-subheader-img",
+        noId: "noSubheader",
+        selectionClass: "piece-selected",
+        iconClass: "selected-check",
+        folder: "subheader",
+        colorScoped: false
+    });
+
+    bindButtonSelection({
+        groupName: "button",
+        imgId: "page-button-img",
+        selectionClass: "piece-selected",
+        iconClass: "selected-check",
+        folder: "button",
+        colorScoped: true
+    });
+
+    bindBackgroundSelection();
+    initVideoEmbed();
+    initDisclaimer();
+    initFormSelection();
+    initAccordionScroll();
 });
