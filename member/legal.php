@@ -1,67 +1,83 @@
 <?php
-/** @var Database $pdo */
+/**
+ * legal.php
+ *
+ * Responsibilities:
+ * - Authenticated system page for viewing legal documents
+ * - Displays Terms & Conditions, Privacy Policy, and Cancellation Policy
+ * - Content is modularized into include files for maintainability
+ */
+
 session_start();
 
 $pageTitle = "System Legal";
 $tab = "legal";
 
-include '../includes/session.php';
-include '../includes/settings.php';
+include_once '../includes/session.php';
+include_once '../includes/settings.php';
 
+/**
+ * Auth gate: restrict access to authenticated users only.
+ */
 if (!isset($_SESSION['user'])) {
     header('location: index.php');
+    exit;
 }
 
+/**
+ * Open database connection.
+ * (Not currently used on this page, but kept consistent with other member pages.)
+ */
 $conn = $pdo->open();
-
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $pageTitle ?> | <?php echo SYSTEM_NAME ?></title>
+    <title><?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?> | <?php echo htmlspecialchars(SYSTEM_NAME, ENT_QUOTES, 'UTF-8'); ?></title>
 
     <?php include_once 'includes/css-fonts.php' ?>
     <?php include_once 'includes/css-plugins.php' ?>
     <?php include_once 'includes/css.php' ?>
 </head>
+
 <body>
 <?php include_once 'includes/loader.php' ?>
-<!-- tap on tap ends-->
-<!-- page-wrapper Start-->
+
 <div class="page-wrapper" id="pageWrapper">
-    <!-- Page Header Start-->
     <div class="page-header">
         <?php include_once 'includes/member-header.php' ?>
     </div>
-    <!-- Page Header Ends-->
-    <!-- Page Body Start-->
+
     <div class="page-body-wrapper">
-        <!-- Page Sidebar Start-->
         <?php include_once 'includes/member-sidebar.php' ?>
-        <!-- Page Sidebar Ends-->
+
         <div class="page-body">
             <div class="container-fluid"></div>
-            <!-- Container-fluid starts-->
+
             <div class="container-fluid dashboard_default">
                 <div class="row widget-grid">
+
+                    <!-- Page Title -->
                     <div class="col-12">
                         <div class="page-title mt-2">
                             <div class="row">
                                 <div class="col-sm-6 ps-0">
-                                    <h3><?php echo $pageTitle ?></h3>
+                                    <h3><?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?></h3>
                                 </div>
                                 <div class="col-sm-6 pe-0">
                                     <ol class="breadcrumb">
                                         <li class="breadcrumb-item">
                                             <a href="dashboard.php">
                                                 <i class="fa fa-home stroke-icon"></i>
-                                            </a></li>
-                                        <li class="breadcrumb-item active"><?php echo $pageTitle ?></li>
+                                            </a>
+                                        </li>
+                                        <li class="breadcrumb-item active">
+                                            <?php echo htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8'); ?>
+                                        </li>
                                     </ol>
                                 </div>
                             </div>
@@ -70,41 +86,50 @@ $conn = $pdo->open();
 
                     <?php include_once 'includes/alerts.php' ?>
 
+                    <!-- Navigation Buttons -->
                     <div class="col-lg-3">
                         <div class="row">
-                            <div class='col-12 mb-3 d-grid'>
-                                <button id="terms" class="btn btn-lg btn-primary">
+                            <div class="col-12 mb-3 d-grid">
+                                <button id="btn-terms" class="btn btn-lg btn-primary">
                                     Terms & Conditions
                                 </button>
                             </div>
-                            <div class='col-12 mb-3 d-grid'>
-                                <button id="privacy" class="btn btn-lg btn-primary">
+                            <div class="col-12 mb-3 d-grid">
+                                <button id="btn-privacy" class="btn btn-lg btn-primary">
                                     Privacy Policy
                                 </button>
                             </div>
-                            <div class='col-12 mb-3 d-grid'>
-                                <button id="cancel" class="btn btn-lg btn-primary">
+                            <div class="col-12 mb-3 d-grid">
+                                <button id="btn-cancel" class="btn btn-lg btn-primary">
                                     Cancellation Policy
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    <div class='col-lg-9'>
+                    <!-- Legal Content -->
+                    <div class="col-lg-9">
                         <div class="row justify-content-center">
                             <div class="col-12 mb-3">
                                 <div class="card">
                                     <div class="card-body">
                                         <div class="row">
-                                            <span id="terms" class="">
-                                                <?php include "forms/terms.php" ?>
+
+                                            <!-- Terms -->
+                                            <span id="content-terms">
+                                                <?php include_once 'forms/terms.php'; ?>
                                             </span>
-                                            <span id="privacy" class="d-none">
-                                                <?php include "forms/privacy.php" ?>
+
+                                            <!-- Privacy -->
+                                            <span id="content-privacy" class="d-none">
+                                                <?php include_once 'forms/privacy.php'; ?>
                                             </span>
-                                            <span id="cancel" class="d-none">
-                                                <?php include "forms/cancel.php" ?>
+
+                                            <!-- Cancellation -->
+                                            <span id="content-cancel" class="d-none">
+                                                <?php include_once 'forms/cancel.php'; ?>
                                             </span>
+
                                         </div>
                                     </div>
                                 </div>
@@ -114,13 +139,18 @@ $conn = $pdo->open();
 
                 </div>
             </div>
-            <!-- Container-fluid Ends-->
         </div>
 
         <?php include_once 'includes/member-footer.php' ?>
-
     </div>
 </div>
+
+<?php
+/**
+ * Close database connection after page rendering is complete.
+ */
+$pdo->close();
+?>
 
 <?php include_once 'includes/js.php' ?>
 <?php include_once 'includes/js-plugins.php' ?>
@@ -128,45 +158,34 @@ $conn = $pdo->open();
 <?php include_once 'includes/live-chat.php' ?>
 
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
-        // Get all buttons
-        const termsButton = document.getElementById("terms");
-        const privacyButton = document.getElementById("privacy");
-        const cancelButton = document.getElementById("cancel");
+    document.addEventListener("DOMContentLoaded", function () {
 
-        // Get all content spans
-        const termsContent = document.querySelector("span#terms");
-        const privacyContent = document.querySelector("span#privacy");
-        const cancelContent = document.querySelector("span#cancel");
+        const buttons = {
+            terms: document.getElementById("btn-terms"),
+            privacy: document.getElementById("btn-privacy"),
+            cancel: document.getElementById("btn-cancel")
+        };
 
-        // Function to show the selected content and hide others
-        function showContent(contentToShow) {
-            // Hide all content
-            termsContent.classList.add("d-none");
-            privacyContent.classList.add("d-none");
-            cancelContent.classList.add("d-none");
+        const content = {
+            terms: document.getElementById("content-terms"),
+            privacy: document.getElementById("content-privacy"),
+            cancel: document.getElementById("content-cancel")
+        };
 
-            // Show the selected content
-            contentToShow.classList.remove("d-none");
+        /**
+         * Hide all content sections, then show the requested one.
+         */
+        function showSection(section) {
+            Object.values(content).forEach(el => el.classList.add("d-none"));
+            content[section].classList.remove("d-none");
         }
 
-        // Add event listeners to buttons
-        termsButton.addEventListener("click", function() {
-            showContent(termsContent);
-        });
-
-        privacyButton.addEventListener("click", function() {
-            showContent(privacyContent);
-        });
-
-        cancelButton.addEventListener("click", function() {
-            showContent(cancelContent);
-        });
+        buttons.terms.addEventListener("click", () => showSection("terms"));
+        buttons.privacy.addEventListener("click", () => showSection("privacy"));
+        buttons.cancel.addEventListener("click", () => showSection("cancel"));
     });
 </script>
 
 <script>new WOW().init();</script>
-
 </body>
-
 </html>
